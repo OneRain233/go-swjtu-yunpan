@@ -60,4 +60,17 @@ type FileNode struct {
 	Size        int64  `json:"size"`
 	isDir       bool
 	parentNode  *FileNode
+	Path        string
+}
+
+type DownloadInfo struct {
+	Authrequest   []string `json:"authrequest"`
+	ClientMtime   int64    `json:"client_mtime"`
+	Editor        string   `json:"editor"`
+	Modified      int64    `json:"modified"`
+	Name          string   `json:"name"`
+	NeedWatermark bool     `json:"need_watermark"`
+	Rev           string   `json:"rev"`
+	Siteid        string   `json:"siteid"`
+	Size          int      `json:"size"`
 }

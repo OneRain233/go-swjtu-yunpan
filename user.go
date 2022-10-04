@@ -62,7 +62,7 @@ func (user *User) printUser() {
 
 }
 
-func (user *User) getDocsEntries() error {
+func (user *User) getDocsEntries() (error error, n []Entry) {
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) // the certificate is invalid on this site
 	resp, err := client.R().
 		SetQueryParam("tokenid", user.TokenId).
@@ -73,7 +73,7 @@ func (user *User) getDocsEntries() error {
 		Post("https://yunpan.swjtu.edu.cn:9999/v1/entrydoc")
 
 	if err != nil {
-		return err
+		return err, []Entry{}
 	}
 	fmt.Println("===============================")
 	fmt.Println(resp)
@@ -84,12 +84,12 @@ func (user *User) getDocsEntries() error {
 	//var temp map[string][]byte
 	err = json.Unmarshal(resp.Body(), &temp)
 	if err != nil {
-		return err
+		return err, []Entry{}
 	}
 
 	// set user info
 	user.DocEntries = temp.Docinfos
-	return nil
+	return nil, user.DocEntries
 }
 
 func (user *User) getDir(node FileNode) (error error, n []FileNode) {
@@ -100,7 +100,7 @@ func (user *User) getDir(node FileNode) (error error, n []FileNode) {
 		SetQueryParam("userid", user.UserId).
 		SetQueryParam("method", "list").
 		SetHeader("User-Agent", "Android").
-		// {"docid":"gns:\/\/8A7A69A73B8D428C90320800E6AD6783","by":"time","sort":"desc","attr":true}
+		// {"docid":"","by":"time","sort":"desc","attr":true}
 		SetBody(`{"docid":"` + DocId + `","by":"time","sort":"desc","attr":true}`).
 		Post("https://yunpan.swjtu.edu.cn:9124/v1/dir")
 
@@ -140,6 +140,67 @@ func toFileNode(node *FileNode, parentFileNode *FileNode) error {
 		node.isDir = false
 	}
 	node.parentNode = parentFileNode
+	node.Path = node.Docid
 	return nil
 
+}
+
+func (user *User) downloadFile(node FileNode) error {
+	if node.isDir {
+		return fmt.Errorf("cannot download a directory")
+	}
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) // the certificate is invalid on this site
+
+	//{
+	//"docid":"",
+	//"reqhost":"yunpan.swjtu.edu.cn",
+	//"rev":""
+	//}
+	reqhost := "yunpan.swjtu.edu.cn"
+	rev := node.Rev
+	docid := node.Path
+	body := `{"docid":"` + docid + `","reqhost":"` + reqhost + `","rev":"` + rev + `"}`
+	resp, err := client.R().
+		SetQueryParam("tokenid", user.TokenId).
+		SetQueryParam("userid", user.UserId).
+		SetQueryParam("method", "osdownload").
+		SetHeader("User-Agent", "Android").
+		SetBody(body).
+		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+
+	if err != nil {
+		return err
+	}
+
+	err = saveFile(resp.Body())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func saveFile(message json.RawMessage) error {
+	var file DownloadInfo
+	err := json.Unmarshal(message, &file)
+	if err != nil {
+		return err
+	}
+	fmt.Println("=============Downloading================")
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) // the certificate is invalid on this site
+	get, err := client.R().
+		SetHeader("X-Eoss-Date", file.Authrequest[2][13:]).
+		SetHeader("X-Eoss-Length", file.Authrequest[3][15:]).
+		SetHeader("Authorization", file.Authrequest[4][15:]).
+		SetHeader(`x-as-userid`, file.Authrequest[5][15:]).
+		SetHeader("User-Agent", "Android").
+		SetHeader("Content-Length", "0").
+		SetOutput(file.Name).
+		Get(file.Authrequest[1])
+	if err != nil {
+		return err
+	}
+	fmt.Println(get)
+
+	return nil
 }

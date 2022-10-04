@@ -17,24 +17,18 @@ func cli(user *User) error {
 		}
 		switch option {
 		case 1:
-			// TODO
-			//err, username, password := attemptLogin()
-			//if err != nil {
-			//	return err
-			//}
-			//user.Username = username
-			//user.Password = password
+			// TODO: encrypt password
 			err = user.doLogin()
 			if err != nil {
 				return err
 			}
-			user.printUser()
-			err = user.getDocsEntries()
+			isLogin = true
+			err, _ = user.getDocsEntries()
 			if err != nil {
 				return err
 			}
-			isLogin = true
-
+			//fmt.Println(user.getDocsEntries())
+			//davMain(user) // TODO: webdav server
 		case 2:
 			fmt.Println("logout")
 
@@ -66,7 +60,40 @@ func cli(user *User) error {
 			}
 			showDir(dir)
 			//fmt.Println(dirId)
+		case 5:
+			// TODO: list files in a dir
+			fmt.Println("List files in a dir")
+		case 6:
+			entryIdx := 0
+			_, err := fmt.Scanln(&entryIdx)
+			if err != nil {
+				return err
+			}
+			entry := user.DocEntries[entryIdx]
+			err, filenode := entryToFileNode(entry)
+			if err != nil {
+				return err
+			}
+			var dir []FileNode
+			err, dir = user.getDir(filenode)
+			if err != nil {
+				return err
+			}
+			showDir(dir)
+			fileIdx := 0
+			_, err = fmt.Scanln(&fileIdx)
+			if err != nil {
+				return err
+			}
+			file := dir[fileIdx]
+			err = user.downloadFile(file)
+			if err != nil {
+				return err
+			}
+
+			//err = user.downloadFile()
 		}
+
 	}
 
 	return nil
@@ -80,7 +107,8 @@ func entryToFileNode(entry Entry) (error error, node FileNode) {
 	node.ClientMtime = entry.ClientMtime
 	node.Size = int64(entry.Size)
 	node.isDir = true
-
+	node.parentNode = nil
+	node.Path = entry.Docid
 	return nil, node
 }
 
@@ -96,6 +124,7 @@ func showOptions() {
 	fmt.Println("3. List entries")
 	fmt.Println("4. List Dir")
 	fmt.Println("5. List files in a dir")
+	fmt.Println("6. Download file")
 	fmt.Println("9. Exit")
 	//return nil
 }
@@ -129,9 +158,9 @@ func attemptLogin() (error error, username string, password string) {
 func showDir(nodes []FileNode) {
 	for _, node := range nodes {
 		if node.isDir {
-			fmt.Print(node.Name + "/")
+			fmt.Print(node.Name + " " + node.Docid)
 		} else {
-			fmt.Print(node.Name)
+			fmt.Print(node.Name + " " + node.Docid)
 		}
 		fmt.Println()
 	}

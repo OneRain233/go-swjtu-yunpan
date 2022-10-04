@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -14,8 +15,16 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-	username := os.Getenv("USERNAME")
+	username := os.Getenv("STUID")
 	password := os.Getenv("PASSWORD")
+	// base64 decode password
+	newPass, err := base64.StdEncoding.DecodeString(password)
+	if err != nil {
+		log.Fatal(err)
+	}
+	password = string(newPass)
+	fmt.Println(username, password)
+
 	// create new user
 	user := User{
 		Username: username,
