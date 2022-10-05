@@ -192,15 +192,16 @@ func saveFile(message json.RawMessage) error {
 	}
 	fmt.Println("=============Downloading================")
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) // the certificate is invalid on this site
-	get, err := client.R().
-		SetHeader("X-Eoss-Date", file.Authrequest[2][13:]).
-		SetHeader("X-Eoss-Length", file.Authrequest[3][15:]).
-		SetHeader("Authorization", file.Authrequest[4][15:]).
-		SetHeader(`x-as-userid`, file.Authrequest[5][15:]).
-		SetHeader("User-Agent", "Android").
-		SetHeader("Content-Length", "0").
-		SetOutput(file.Name).
-		Get(file.Authrequest[1])
+	// TODO: clean these code
+	resp := client.R()
+	aR, err := parseAuthRequest(file.Authrequest)
+	url := aR.Url
+	headers := aR.Headers
+	for k, v := range headers {
+		resp.SetHeader(k, v)
+	}
+	resp.SetOutput(file.Name)
+	get, err := resp.Get(url)
 	if err != nil {
 		return err
 	}
@@ -379,13 +380,19 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 	if err != nil {
 		return err
 	}
-	headers := parseHeader(strings.Join(aR.AuthRequest[2:], "\n"))
+	aRR, err := parseAuthRequest(aR.AuthRequest)
+	if err != nil {
+		return err
+	}
+	headers := aRR.Headers
+	url := aRR.Url
+
 	req := client.R()
 	for k, v := range headers {
 		req.SetHeader(k, v)
 	}
 	req.SetBody([]byte(newBody[0]))
-	_, err = req.Post(aR.AuthRequest[1])
+	_, err = req.Post(url)
 	if err != nil {
 		return err
 	}
@@ -431,4 +438,54 @@ func parseBodyWithBoundary(body string, boundary string) ([]string, error) {
 		result[i] = strings.TrimSpace(v)
 	}
 	return result, nil
+}
+
+func parseAuthRequest(rawMsg []string) (AuthRequest, error) {
+	//["GET","https://yunpan.swjtu.edu.cn:9029///-i","X-Eoss-Date: Wed, 05 Oct 2022 03:53:46 GMT","X-Eoss-Length: ","Authorization: ","x-as-userid: "]
+	method := rawMsg[0]
+	url := rawMsg[1]
+	headers := parseHeader(strings.Join(rawMsg[2:], "\n"))
+	return AuthRequest{
+		Method:  method,
+		Url:     url,
+		Headers: headers,
+	}, nil
+}
+
+func (user *User) deleteFile(file FileNode) error {
+	docID := file.Docid
+	req, err := client.R().
+		SetQueryParam("tokenid", user.TokenId).
+		SetQueryParam("userid", user.UserId).
+		SetQueryParam("method", "delete").
+		SetHeader("User-Agent", "Android").
+		SetBody(`{"docid":"` + docID + `"}`).
+		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+
+	if err != nil {
+		return err
+	}
+	if req.StatusCode() != 200 {
+		return errors.New("delete failed")
+	}
+	return nil
+}
+
+func (user *User) renameFile(file FileNode, newName string) error {
+	docId := file.Docid
+	req, err := client.R().
+		SetQueryParam("tokenid", user.TokenId).
+		SetQueryParam("userid", user.UserId).
+		SetQueryParam("method", "rename").
+		SetHeader("User-Agent", "Android").
+		SetBody(`{"docid":"` + docId + `","newname":"` + newName + `"}`).
+		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+	if err != nil {
+		return err
+	}
+	if req.StatusCode() != 200 {
+		return errors.New("rename failed")
+	}
+	return nil
+
 }

@@ -74,3 +74,9 @@ type DownloadInfo struct {
 	Siteid        string   `json:"siteid"`
 	Size          int      `json:"size"`
 }
+
+type AuthRequest struct {
+	Method  string            `json:"method"`
+	Url     string            `json:"url"`
+	Headers map[string]string `json:"header"`
+}
