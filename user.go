@@ -3,8 +3,12 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/go-resty/resty/v2"
+	"os"
+	"strconv"
+	"strings"
 )
 
 var client = resty.New()
@@ -203,4 +207,228 @@ func saveFile(message json.RawMessage) error {
 	fmt.Println(get)
 
 	return nil
+}
+
+func parseHeader(rawHeader string) (header map[string]string) {
+	header = make(map[string]string)
+	lines := strings.Split(rawHeader, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, ":") {
+			s := strings.Split(line, ":")
+			header[s[0]] = strings.Join(s[1:], ":")
+		}
+	}
+	return header
+}
+
+func (user *User) uploadFile(node FileNode, filepath string) error {
+	// TODO: multi parts upload
+	// TODO: upload a duplicate file (rename)
+	if !node.isDir {
+		return fmt.Errorf("cannot upload to a file")
+	}
+	fmt.Println("Uploading to " + node.Name)
+	client.SetProxy("http://192.168.123.65:9999")
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) // the certificate is invalid on this site
+	// get upload info
+	targetDocId := node.Docid
+	fi, err := os.Stat(filepath)
+	if err != nil {
+		return err
+	}
+	fileSize := fi.Size()
+	fileName := fi.Name()
+	// time stamp like 1664775766000000
+	clientMtime := fi.ModTime().UnixNano()
+	ondup := 0
+	//{"docid":"","length":2662,"name":"","client_mtime":1664775766000000,"ondup":0}
+	post, err := client.R().
+		SetQueryParam("tokenid", user.TokenId).
+		SetQueryParam("userid", user.UserId).
+		SetQueryParam("method", "osinitmultiupload").
+		SetHeader("User-Agent", "Android").
+		SetBody(`{"docid":"` + targetDocId + `","length":` + strconv.FormatInt(fileSize, 10) + `,"name":"` + fileName + `","client_mtime":` + strconv.FormatInt(clientMtime, 10) + `,"ondup":` + strconv.Itoa(ondup) + `}`).
+		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+	if err != nil {
+		return err
+	}
+	//{
+	//	"docid":"",
+	//	"name":"",
+	//	"rev":"",
+	//	"uploadid":""
+	//}
+	uploadInfo := struct {
+		Docid    string `json:"docid"`
+		Name     string `json:"name"`
+		Rev      string `json:"rev"`
+		Uploadid string `json:"uploadid"`
+	}{}
+	err = json.Unmarshal(post.Body(), &uploadInfo)
+	if err != nil {
+		return err
+	}
+
+	// get request info
+	//{"docid":"","rev":"","uploadid":"","parts":"1","reqhost":"yunpan.swjtu.edu.cn","usehttps":true}
+	post, err = client.R().
+		SetQueryParam("tokenid", user.TokenId).
+		SetQueryParam("userid", user.UserId).
+		SetQueryParam("method", "osuploadpart").
+		SetHeader("User-Agent", "Android").
+		SetBody(`{"docid":"` + uploadInfo.Docid + `","rev":"` + uploadInfo.Rev + `","uploadid":"` + uploadInfo.Uploadid + `","parts":"1","reqhost":"yunpan.swjtu.edu.cn","usehttps":true}`).
+		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+	if err != nil {
+		return err
+	}
+	// {"authrequests":
+	//{"1":
+	//["PUT",
+	//"https://yunpan.swjtu.edu.cn:9029/",
+	//"Content-Type: application/octet-stream",
+	//"X-Eoss-Date: Wed, 05 Oct 2022 03:46:36 GMT",
+	//"Authorization: "",
+	//"x-as-userid: ""]}}
+	requestInfo := struct {
+		Authrequests map[string][]string `json:"authrequests"`
+	}{}
+	err = json.Unmarshal(post.Body(), &requestInfo)
+	if err != nil {
+		return err
+	}
+
+	// upload file (PUT)
+	fileContent, err := os.ReadFile(filepath)
+	if err != nil {
+		return err
+	}
+	fmt.Println(fileContent)
+	//fmt.Println("debug")
+	var Etag string
+	for _, authrequest := range requestInfo.Authrequests {
+		headers := parseHeader(strings.Join(authrequest[2:], "\n"))
+		req := client.R()
+		for k, v := range headers {
+			req.SetHeader(k, v)
+		}
+		req.SetBody(fileContent)
+		put, err := req.Put(authrequest[1])
+		if err != nil {
+			return err
+		}
+		fmt.Println(put.Result())
+		Etag = put.Header().Get("Etag")
+
+		fmt.Println(Etag)
+	}
+
+	// complete upload
+	//{"docid":"",
+	//"rev":"",
+	//"uploadid":"",
+	//"partinfo":{"1":["string",2662]},    // string int fucking data structure ????????? Stupid API
+	//"reqhost":"yunpan.swjtu.edu.cn",
+	//"usehttps":true}
+	//partinfo["1"] = []string{Etag, strconv.FormatInt(fileSize, 10)}
+	//partinfo := fmt.Sprintf(`{"1":["%s",%d]}`, Etag, fileSize)
+	//body := struct {
+	//	Docid    string `json:"docid"`
+	//	Rev      string `json:"rev"`
+	//	Uploadid string `json:"uploadid"`
+	//	Partinfo string `json:"partinfo"` // TODO: fix bug
+	//	Reqhost  string `json:"reqhost"`
+	//	Usehttps bool   `json:"usehttps"`
+	//}{}
+	//body.Docid = uploadInfo.Docid
+	//body.Rev = uploadInfo.Rev
+	//body.Uploadid = uploadInfo.Uploadid
+	//body.Partinfo = partinfo
+	//body.Reqhost = "yunpan.swjtu.edu.cn"
+	//body.Usehttps = true
+	body := fmt.Sprintf(`{"docid":"%s","rev":"%s","uploadid":"%s","partinfo":{"1":["%s",%d]},"reqhost":"yunpan.swjtu.edu.cn","usehttps":true}`, uploadInfo.Docid, uploadInfo.Rev, uploadInfo.Uploadid, Etag, fileSize)
+	post, err = client.R().
+		SetQueryParam("tokenid", user.TokenId).
+		SetQueryParam("userid", user.UserId).
+		SetQueryParam("method", "oscompleteupload").
+		SetHeader("User-Agent", "Android").
+		SetBody(body).
+		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+	if err != nil {
+		return err
+	}
+	contentType := post.Header().Get("Content-Type")
+	boundary := parseBoundary(contentType)
+	fmt.Println(boundary)
+	body = string(post.Body())
+	newBody, err := parseBodyWithBoundary(body, boundary)
+	if err != nil {
+		return err
+	}
+	fmt.Println(len(newBody))
+	for _, v := range newBody {
+		fmt.Println(v)
+	}
+	if len(newBody) != 2 {
+		return errors.New("upload failed")
+	}
+	// post complete upload
+	aR := struct {
+		AuthRequest []string `json:"authrequest"`
+	}{}
+	err = json.Unmarshal([]byte(newBody[1]), &aR)
+	if err != nil {
+		return err
+	}
+	headers := parseHeader(strings.Join(aR.AuthRequest[2:], "\n"))
+	req := client.R()
+	for k, v := range headers {
+		req.SetHeader(k, v)
+	}
+	req.SetBody([]byte(newBody[0]))
+	_, err = req.Post(aR.AuthRequest[1])
+	if err != nil {
+		return err
+	}
+
+	// end upload
+	//{"docid":"gns:\/\/\\/","rev":""}
+	req = client.R().
+		SetQueryParam("tokenid", user.TokenId).
+		SetQueryParam("userid", user.UserId).
+		SetQueryParam("method", "osendupload").
+		SetHeader("User-Agent", "Android").
+		SetBody(`{"docid":"` + uploadInfo.Docid + `","rev":"` + uploadInfo.Rev + `"}`)
+	_, err = req.Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func parseBoundary(contentType string) string {
+	// Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+	boundary := strings.Split(contentType, ";")[1]
+	boundary = strings.TrimSpace(boundary)
+	boundary = strings.TrimPrefix(boundary, "boundary=")
+	return boundary
+}
+
+func parseBodyWithBoundary(body string, boundary string) ([]string, error) {
+	//	--eyyGHBAJBIdGxINw1LCiyh4S4cL2f8st
+	//
+	//[{"path":"db/-0","etag":"","size_bytes":2662}]
+	//	--eyyGHBAJBIdGxINw1LCiyh4S4cL2f8st
+	//
+	//	{"authrequest":["POST","https://yunpan.swjtu.edu.cn:9029/anyshares3accesstestbucket//-i","Content-Type: application/x-www-form-urlencoded","X-Eoss-Date: Wed, 05 Oct 2022 03:46:38 GMT","Authorization: ","x-as-userid: "]}
+	//	--eyyGHBAJBIdGxINw1LCiyh4S4cL2f8st--
+	var result []string
+	body = strings.TrimPrefix(body, "--"+boundary)
+	body = strings.TrimSuffix(body, "--"+boundary+"--")
+	body = strings.TrimSpace(body)
+	result = strings.Split(body, "--"+boundary)
+	for i, v := range result {
+		result[i] = strings.TrimSpace(v)
+	}
+	return result, nil
 }

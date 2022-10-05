@@ -17,18 +17,10 @@ func cli(user *User) error {
 		}
 		switch option {
 		case 1:
-			// TODO: encrypt password
-			err = user.doLogin()
+			err = loginInterface(user)
 			if err != nil {
 				return err
 			}
-			isLogin = true
-			err, _ = user.getDocsEntries()
-			if err != nil {
-				return err
-			}
-			//fmt.Println(user.getDocsEntries())
-			//davMain(user) // TODO: webdav server
 		case 2:
 			fmt.Println("logout")
 
@@ -64,38 +56,87 @@ func cli(user *User) error {
 			// TODO: list files in a dir
 			fmt.Println("List files in a dir")
 		case 6:
-			entryIdx := 0
-			_, err := fmt.Scanln(&entryIdx)
+			err = downloadInterface(user)
 			if err != nil {
 				return err
 			}
-			entry := user.DocEntries[entryIdx]
-			err, filenode := entryToFileNode(entry)
-			if err != nil {
-				return err
-			}
-			var dir []FileNode
-			err, dir = user.getDir(filenode)
-			if err != nil {
-				return err
-			}
-			showDir(dir)
-			fileIdx := 0
-			_, err = fmt.Scanln(&fileIdx)
-			if err != nil {
-				return err
-			}
-			file := dir[fileIdx]
-			err = user.downloadFile(file)
-			if err != nil {
-				return err
-			}
-
-			//err = user.downloadFile()
+		case 7:
+			err = uploadInterface(user)
 		}
 
 	}
 
+	return nil
+}
+
+func uploadInterface(user *User) error {
+	var filepath string
+	_, err := fmt.Scanln(&filepath)
+	if err != nil {
+		return err
+	}
+	// choose file entry to upload
+	err = showDocEntries(user)
+	if err != nil {
+		return err
+	}
+	entryIdx := 0
+	_, err = fmt.Scanln(&entryIdx)
+	if err != nil {
+		return err
+	}
+	entry := user.DocEntries[entryIdx]
+	err, filenode := entryToFileNode(entry)
+	if err != nil {
+		return err
+	}
+	err = user.uploadFile(filenode, filepath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func loginInterface(user *User) error {
+	err := user.doLogin()
+	if err != nil {
+		return err
+	}
+	isLogin = true
+	err, _ = user.getDocsEntries()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func downloadInterface(user *User) error {
+	entryIdx := 0
+	_, err := fmt.Scanln(&entryIdx)
+	if err != nil {
+		return err
+	}
+	entry := user.DocEntries[entryIdx]
+	err, filenode := entryToFileNode(entry)
+	if err != nil {
+		return err
+	}
+	var dir []FileNode
+	err, dir = user.getDir(filenode)
+	if err != nil {
+		return err
+	}
+	showDir(dir)
+	fileIdx := 0
+	_, err = fmt.Scanln(&fileIdx)
+	if err != nil {
+		return err
+	}
+	file := dir[fileIdx]
+	err = user.downloadFile(file)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
