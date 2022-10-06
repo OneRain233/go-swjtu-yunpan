@@ -229,7 +229,7 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 		return fmt.Errorf("cannot upload to a file")
 	}
 	fmt.Println("Uploading to " + node.Name)
-	client.SetProxy("http://192.168.123.65:9999")
+	//client.SetProxy("http://192.168.123.65:9999")
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) // the certificate is invalid on this site
 	// get upload info
 	targetDocId := node.Docid
@@ -303,7 +303,7 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(fileContent)
+	//fmt.Println(fileContent)
 	//fmt.Println("debug")
 	var Etag string
 	for _, authrequest := range requestInfo.Authrequests {
@@ -317,10 +317,10 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(put.Result())
+		//fmt.Println(put.Result())
 		Etag = put.Header().Get("Etag")
 
-		fmt.Println(Etag)
+		//fmt.Println(Etag)
 	}
 
 	// complete upload
@@ -359,13 +359,13 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 	}
 	contentType := post.Header().Get("Content-Type")
 	boundary := parseBoundary(contentType)
-	fmt.Println(boundary)
+	//fmt.Println(boundary)
 	body = string(post.Body())
 	newBody, err := parseBodyWithBoundary(body, boundary)
 	if err != nil {
 		return err
 	}
-	fmt.Println(len(newBody))
+	//fmt.Println(len(newBody))
 	for _, v := range newBody {
 		fmt.Println(v)
 	}
