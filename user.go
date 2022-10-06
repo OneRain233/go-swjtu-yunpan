@@ -11,13 +11,22 @@ import (
 	"strings"
 )
 
+const (
+	authUrl  = "http://yunpan.swjtu.edu.cn:9998/v1/auth1"
+	userUrl  = "http://yunpan.swjtu.edu.cn:9998/v1/user"
+	entryUrl = "https://yunpan.swjtu.edu.cn:9999/v1/entrydoc"
+	dirUrl   = "https://yunpan.swjtu.edu.cn:9124/v1/dir"
+	fileUrl  = "https://yunpan.swjtu.edu.cn:9124/v1/file"
+)
+
 var client = resty.New()
 
 func (user *User) doLogin() error {
 	resp, err := client.R().
 		SetHeader("Content-Type", "application/json").
-		SetBody(`{"account":"` + user.Username + `","deviceinfo":{"ostype":1},"password":"` + user.Password + `","vcodeinfo":{"uuid":"","vcode":"","ismodify":false}}`).
-		Post("http://yunpan.swjtu.edu.cn:9998/v1/auth1?method=getnew")
+		SetBody(`{"account":"`+user.Username+`","deviceinfo":{"ostype":1},"password":"`+user.Password+`","vcodeinfo":{"uuid":"","vcode":"","ismodify":false}}`).
+		SetQueryParam("method", "getnew").
+		Post(authUrl)
 	if err != nil {
 		return err
 	}
@@ -44,7 +53,8 @@ func (user *User) doLogin() error {
 		SetBody(`{}`).
 		SetQueryParam("tokenid", user.TokenId).
 		SetQueryParam("userid", user.UserId).
-		Post("http://yunpan.swjtu.edu.cn:9998/v1/user?method=get")
+		SetQueryParam("method", "get").
+		Post(userUrl)
 	if err != nil {
 		return err
 	}
@@ -56,7 +66,7 @@ func (user *User) doLogin() error {
 
 	// set user info
 	user.Name = result["name"].(string)
-
+	fmt.Println("login success")
 	return nil
 }
 
@@ -74,14 +84,14 @@ func (user *User) getDocsEntries() (error error, n []Entry) {
 		SetQueryParam("method", "get").
 		SetHeader("User-Agent", "Android").
 		SetBody(``).
-		Post("https://yunpan.swjtu.edu.cn:9999/v1/entrydoc")
+		Post(entryUrl)
 
 	if err != nil {
 		return err, []Entry{}
 	}
-	fmt.Println("===============================")
-	fmt.Println(resp)
-	fmt.Println("===============================")
+	//fmt.Println("===============================")
+	//fmt.Println(resp)
+	//fmt.Println("===============================")
 	// decode json
 	//var entries []Entry
 	var temp tempEntries
@@ -106,7 +116,7 @@ func (user *User) getDir(node FileNode) (error error, n []FileNode) {
 		SetHeader("User-Agent", "Android").
 		// {"docid":"","by":"time","sort":"desc","attr":true}
 		SetBody(`{"docid":"` + DocId + `","by":"time","sort":"desc","attr":true}`).
-		Post("https://yunpan.swjtu.edu.cn:9124/v1/dir")
+		Post(dirUrl)
 
 	newDir := Dir{}
 	err = json.Unmarshal(resp.Body(), &newDir)
@@ -170,7 +180,7 @@ func (user *User) downloadFile(node FileNode) error {
 		SetQueryParam("method", "osdownload").
 		SetHeader("User-Agent", "Android").
 		SetBody(body).
-		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+		Post(fileUrl)
 
 	if err != nil {
 		return err
@@ -249,7 +259,7 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 		SetQueryParam("method", "osinitmultiupload").
 		SetHeader("User-Agent", "Android").
 		SetBody(`{"docid":"` + targetDocId + `","length":` + strconv.FormatInt(fileSize, 10) + `,"name":"` + fileName + `","client_mtime":` + strconv.FormatInt(clientMtime, 10) + `,"ondup":` + strconv.Itoa(ondup) + `}`).
-		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+		Post(fileUrl)
 	if err != nil {
 		return err
 	}
@@ -278,7 +288,7 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 		SetQueryParam("method", "osuploadpart").
 		SetHeader("User-Agent", "Android").
 		SetBody(`{"docid":"` + uploadInfo.Docid + `","rev":"` + uploadInfo.Rev + `","uploadid":"` + uploadInfo.Uploadid + `","parts":"1","reqhost":"yunpan.swjtu.edu.cn","usehttps":true}`).
-		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+		Post(fileUrl)
 	if err != nil {
 		return err
 	}
@@ -353,7 +363,7 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 		SetQueryParam("method", "oscompleteupload").
 		SetHeader("User-Agent", "Android").
 		SetBody(body).
-		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+		Post(fileUrl)
 	if err != nil {
 		return err
 	}
@@ -405,7 +415,7 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 		SetQueryParam("method", "osendupload").
 		SetHeader("User-Agent", "Android").
 		SetBody(`{"docid":"` + uploadInfo.Docid + `","rev":"` + uploadInfo.Rev + `"}`)
-	_, err = req.Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+	_, err = req.Post(fileUrl)
 	if err != nil {
 		return err
 	}
@@ -460,7 +470,7 @@ func (user *User) deleteFile(file FileNode) error {
 		SetQueryParam("method", "delete").
 		SetHeader("User-Agent", "Android").
 		SetBody(`{"docid":"` + docID + `"}`).
-		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+		Post(fileUrl)
 
 	if err != nil {
 		return err
@@ -479,7 +489,7 @@ func (user *User) renameFile(file FileNode, newName string) error {
 		SetQueryParam("method", "rename").
 		SetHeader("User-Agent", "Android").
 		SetBody(`{"docid":"` + docId + `","newname":"` + newName + `"}`).
-		Post("https://yunpan.swjtu.edu.cn:9124/v1/file")
+		Post(fileUrl)
 	if err != nil {
 		return err
 	}

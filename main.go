@@ -38,8 +38,3 @@ func main() {
 		fmt.Println(err)
 	}
 }
-
-func loadConfig() error {
-	// load config from .env
-	return nil
-}

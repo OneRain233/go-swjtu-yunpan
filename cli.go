@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var isLogin bool = false
+var isLogin = false
 
 // current dir
 var curNode *FileNode
@@ -71,17 +71,6 @@ func showBanner() {
 	//return nil
 }
 
-func showDocEntries(user *User) error {
-
-	for idx, doc := range user.DocEntries {
-		fmt.Println(idx)
-		fmt.Println(doc.Docname)
-		fmt.Println(doc.Docid)
-		fmt.Println("----------")
-	}
-	return nil
-}
-
 func attemptLogin() (error error, username string, password string) {
 	// TODO: encrypt password
 	fmt.Println("Username: ")
@@ -97,18 +86,6 @@ func attemptLogin() (error error, username string, password string) {
 	return nil, username, password
 }
 
-func showDir(nodes []FileNode) {
-	for _, node := range nodes {
-		if node.isDir {
-			fmt.Print(node.Name + " " + node.Docid)
-		} else {
-			fmt.Print(node.Name + " " + node.Docid)
-		}
-		fmt.Println()
-	}
-
-}
-
 func parseCmd(cmd string) (error error, cmdType string, args []string) {
 	temp := strings.Split(cmd, " ")
 	cmdType = strings.TrimSpace(temp[0])
@@ -122,7 +99,6 @@ func parseCmd(cmd string) (error error, cmdType string, args []string) {
 func interactiveInterface(user *User) error {
 	// TODO
 	inputReader := bufio.NewReader(os.Stdin)
-	//commands := []string{"ls", "cd", "upload", "download", "exit"}
 
 	for {
 		fmt.Printf(">")
@@ -186,7 +162,7 @@ func ls(user *User) error {
 	}
 
 	for _, node := range dir {
-		fmt.Printf("%s %s %d\n", node.Name, node.Docid, node.Size)
+		fmt.Printf("%s\t%s\t%d\n", node.Name, node.Docid, node.Size)
 	}
 	return nil
 }
