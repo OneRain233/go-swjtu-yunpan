@@ -23,7 +23,7 @@ func main() {
 		log.Fatal(err)
 	}
 	password = string(newPass)
-	fmt.Println(username, password)
+	//fmt.Println(username, password)
 
 	// create new user
 	user := User{
