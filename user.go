@@ -12,43 +12,44 @@ import (
 )
 
 const (
-	authUrl  = "http://yunpan.swjtu.edu.cn:9998/v1/auth1"
-	userUrl  = "http://yunpan.swjtu.edu.cn:9998/v1/user"
-	entryUrl = "https://yunpan.swjtu.edu.cn:9999/v1/entrydoc"
-	dirUrl   = "https://yunpan.swjtu.edu.cn:9124/v1/dir"
-	fileUrl  = "https://yunpan.swjtu.edu.cn:9124/v1/file"
+	casLoginUrl = "https://cas.swjtu.edu.cn/authserver/login?service=http://yunpan.swjtu.edu.cn/sso"
+	authUrl     = "http://yunpan.swjtu.edu.cn:9998/v1/auth1"
+	userUrl     = "http://yunpan.swjtu.edu.cn:9998/v1/user"
+	entryUrl    = "https://yunpan.swjtu.edu.cn:9999/v1/entrydoc"
+	dirUrl      = "https://yunpan.swjtu.edu.cn:9124/v1/dir"
+	fileUrl     = "https://yunpan.swjtu.edu.cn:9124/v1/file"
 )
 
 var client = resty.New()
 
 func (user *User) doLogin() error {
-	resp, err := client.R().
-		SetHeader("Content-Type", "application/json").
-		SetBody(`{"account":"`+user.Username+`","deviceinfo":{"ostype":1},"password":"`+user.Password+`","vcodeinfo":{"uuid":"","vcode":"","ismodify":false}}`).
-		SetQueryParam("method", "getnew").
-		Post(authUrl)
-	if err != nil {
-		return err
-	}
-	//fmt.Println(resp)
-	// decode json
+	// create a session
+	//resp, err := client.R().
+	//resp, err := client.R().
+	//	SetHeader("Content-Type", "application/x-www-form-urlencoded").
+	//	SetBody("username="+user.Username+"&password="+user.Password).
+	//	SetBody(`{"account":"`+user.Username+`","deviceinfo":{"ostype":1},"password":"`+user.Password+`","vcodeinfo":{"uuid":"","vcode":"","ismodify":false}}`).
+	//	SetQueryParam("method", "getnew").
+	//	Post(authUrl)
+	//if err != nil {
+	//	return err
+	//}
+	////fmt.Println(resp)
+	//// decode json
 	var result map[string]interface{}
-	if json.Unmarshal(resp.Body(), &result) != nil {
-		return err
-	}
-	//fmt.Println(result)
-
-	// check login status (has errcode key)
-	if _, ok := result["errcode"]; ok {
-		return fmt.Errorf("login failed")
-	}
-
-	// set user info
-	user.TokenId = result["tokenid"].(string)
-	user.UserId = result["userid"].(string)
-
+	//if json.Unmarshal(resp.Body(), &result) != nil {
+	//	return err
+	//}
+	////fmt.Println(result)
+	//
+	//// check login status (has errcode key)
+	//if _, ok := result["errcode"]; ok {
+	//	return fmt.Errorf("login failed")
+	//}
+	//
+	// attempt user to input tokenid and userid
 	// get user info
-	resp, err = client.R().
+	resp, err := client.R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(`{}`).
 		SetQueryParam("tokenid", user.TokenId).
@@ -202,7 +203,6 @@ func saveFile(message json.RawMessage) error {
 	}
 	fmt.Println("=============Downloading================")
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}) // the certificate is invalid on this site
-	// TODO: clean these code
 	resp := client.R()
 	aR, err := parseAuthRequest(file.Authrequest)
 	url := aR.Url
@@ -211,11 +211,11 @@ func saveFile(message json.RawMessage) error {
 		resp.SetHeader(k, v)
 	}
 	resp.SetOutput(file.Name)
-	get, err := resp.Get(url)
+	_, err = resp.Get(url)
 	if err != nil {
 		return err
 	}
-	fmt.Println(get)
+	fmt.Println("=============Downloaded================")
 
 	return nil
 }
@@ -233,8 +233,6 @@ func parseHeader(rawHeader string) (header map[string]string) {
 }
 
 func (user *User) uploadFile(node FileNode, filepath string) error {
-	// TODO: multi parts upload
-	// TODO: upload a duplicate file (rename)
 	if !node.isDir {
 		return fmt.Errorf("cannot upload to a file")
 	}
@@ -374,10 +372,6 @@ func (user *User) uploadFile(node FileNode, filepath string) error {
 	newBody, err := parseBodyWithBoundary(body, boundary)
 	if err != nil {
 		return err
-	}
-	//fmt.Println(len(newBody))
-	for _, v := range newBody {
-		fmt.Println(v)
 	}
 	if len(newBody) != 2 {
 		return errors.New("upload failed")

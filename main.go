@@ -17,6 +17,8 @@ func main() {
 	}
 	username := os.Getenv("STUID")
 	password := os.Getenv("PASSWORD")
+	tokenID := os.Getenv("TOKENID")
+	userID := os.Getenv("USERID")
 	// base64 decode password
 	newPass, err := base64.StdEncoding.DecodeString(password)
 	if err != nil {
@@ -30,8 +32,8 @@ func main() {
 		Username: username,
 		Password: password,
 		Name:     "",
-		TokenId:  "",
-		UserId:   "",
+		TokenId:  tokenID,
+		UserId:   userID,
 	}
 	err = cli(&user)
 	if err != nil {

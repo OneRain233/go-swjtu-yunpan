@@ -40,6 +40,24 @@ func cli(user *User) error {
 }
 
 func loginInterface(user *User) error {
+	if user.TokenId == "" || user.UserId == "" {
+		fmt.Println("Please input tokenid and userid")
+		fmt.Print("tokenid: ")
+		var tokenid string
+		_, err := fmt.Scanln(&tokenid)
+		if err != nil {
+			return err
+		}
+		fmt.Print("userid: ")
+		var userid string
+		_, err = fmt.Scanln(&userid)
+		if err != nil {
+			return err
+		}
+		user.TokenId = tokenid
+		user.UserId = userid
+	}
+
 	err := user.doLogin()
 	if err != nil {
 		return err
@@ -116,25 +134,28 @@ func interactiveInterface(user *User) error {
 		case "ls":
 			err = ls(user)
 			if err != nil {
-				return err
+				fmt.Println(err)
 			}
 		case "cd":
 			path := strings.Join(args, "/")
 			err = cd(user, path)
+			if err != nil {
+				fmt.Println(err)
+			}
 		case "upload":
 			err = upload(user, args[0])
 			if err != nil {
-				return err
+				fmt.Println(err)
 			}
 		case "download":
 			err = download(user, args[0])
 			if err != nil {
-				return err
+				fmt.Println(err)
 			}
 		case "pwd":
 			err = pwd()
 			if err != nil {
-				return err
+				fmt.Println(err)
 			}
 		case "exit":
 			fmt.Println("exit")
@@ -197,6 +218,9 @@ func cd(user *User, path string) error {
 			}
 		}
 	}
+	if curNode == nil {
+		return errors.New("no such file or directory")
+	}
 	if !curNode.isDir {
 		return errors.New("not a directory")
 	}
@@ -255,7 +279,6 @@ func upload(user *User, filepath string) error {
 	if err != nil {
 		return err
 	}
-	// check if file is too large
 	file, err := os.Open(filepath)
 	if err != nil {
 		return err
@@ -266,13 +289,13 @@ func upload(user *User, filepath string) error {
 
 		}
 	}(file)
-	fileInfo, err := file.Stat()
+	_, err = file.Stat()
 	if err != nil {
 		return err
 	}
-	if fileInfo.Size() > 1024*1024*1024 {
-		return errors.New("file too large")
-	}
+	//if fileInfo.Size() > 1024*1024*1024 {
+	//	return errors.New("file too large")
+	//}
 	// upload file
 	err = user.uploadFile(*curNode, filepath)
 	if err != nil {
